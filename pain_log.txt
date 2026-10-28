@@ -1,0 +1,40 @@
+AI381 Lab 1 · Pain log
+Name: Areen Almohammed             Student ID:171605            Date:10/15/2026
+
+Start the stopwatch before you open the notebook. One line per step.
+
+Step               | Minutes | What failed or slowed me down                                | Question I could not answer
+-------------------|---------|--------------------------------------------------------------|----------------------------
+Round 1 (train)    |   10    |initial NameError because pd was not                          |why does the notebook require the imports
+                   |         |defined; fixed by running the imports cell                    | cell to run first ?
+Round 1 (serve)    |   10    |no major server error observed;                               |How can I verify which model version
+                   |         | Uvicorn started successfully                                 |the API is serving?
+Round 1 (3 x curl) |   15    |initial JSON formatting error; corrected                      |How can I automate sending multiple
+                   |         |the request and received predictions                          |prediction requests ?
+Twist 1 (v2 data)  |   10    |A KeyError occurred because the column name                   |How can I detect column name changes
+                   |         | changed from 'monthly_charges' to 'monthly_fee'              |automatically before training the model?
+                   |         | in churn_v2.csv. I corrected the feature list,               |
+                   |         |retrained the model, and saved the updated model successfully.|
+Twist 2 (fresh env)|   40    |Notebook interpreter setup and port conflict with the         | How can I verify that the notebook and
+                   |         |old API server.                                               | API use the correct environment?
+Twist 3 (version?) |   10    | Could not verify the model version because                   |How can I identify the model
+                   |         | both models use the same filename                            |version served by the API?
+-------------------|---------|--------------------------------------------------------------|----------------------------
+Total              |         | *Number of failures:   4                                     |
+
+The one thing I would automate first, and why:  I would automate column validation to detect
+                                               schema changes before training and prevent API errors.
+
+
+* 1. NameError: The pandas import cell was not executed before using pd.
+2. JSON formatting error: The request body was incorrectly formatted.
+3. KeyError: The column name changed from monthly_charges to monthly_fee in churn_v2.csv.
+4. Port conflict: Port 8000 was already in use by another running API server.
+
+
+#- Train — 10 minutes: Running the training cells, fixing the pd error, and waiting for training and model saving.
+- Serve — 10 minutes: Installing the requirements, starting Uvicorn, and verifying that the server is running.
+- 3 × curl — 15 minutes: Preparing the requests, fixing the JSON formatting error, and testing the three predictions.
+- Twist 1 — 10 minutes: Identifying the column name mismatch, correcting it, and retraining the model.
+- Twist 2 — 40 minutes: Creating the new virtual environment, installing the libraries, configuring the notebook, and resolving the port conflict.
+- Twist 3 — 10 minutes: Inspecting the model's features and attempting to identify which version the API is using.
