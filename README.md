@@ -40,3 +40,94 @@ Record one 5–8 minute video with your face and voice, say each checkpoint alou
 The full instructions, checkpoints and rubric are on e-learning and on the Teams assignment.
 
 Questions: Thursday online office hours on Teams, the Lab Submissions channel, or talomari@just.edu.jo.
+
+# AI381 Lab 2 — Churn Prediction API
+
+[![CI](https://github.com/areenshunnaq13-blip/AI381-Lab2-Churn-API/actions/workflows/ci.yml/badge.svg)](https://github.com/areenshunnaq13-blip/AI381-Lab2-Churn-API/actions/workflows/ci.yml)
+
+A containerized FastAPI service for predicting customer churn probabilities using a trained machine learning model.
+
+## Features
+
+- FastAPI REST API.
+- Customer churn prediction using a saved machine learning model.
+- Input validation.
+- Health check endpoint.
+- Automated tests with pytest.
+- Multi-stage Docker build.
+- Automated GitHub Actions workflow.
+- Trivy vulnerability scanning.
+- Docker image publishing to GitHub Container Registry (GHCR), tagged by commit SHA.
+
+## Requirements
+
+- Docker Desktop with Docker Compose.
+- Git, if cloning the repository.
+
+## Run the service
+
+Clone the repository and open its directory:
+
+```bash
+git clone https://github.com/areenshunnaq13-blip/AI381-Lab2-Churn-API.git
+cd AI381-Lab2-Churn-API
+```
+
+Start the application with one command:
+
+```bash
+docker compose up --build
+```
+
+The API will be available at:
+
+- Health check: http://localhost:8000/health
+- Interactive API documentation: http://localhost:8000/docs
+
+Use the documentation at `/docs` to inspect the prediction endpoint and submit a valid request to `/predict`.
+
+To stop the service, press `Ctrl + C`. To remove the Compose container, run:
+
+```bash
+docker compose down
+```
+
+## Run tests
+
+Install the dependencies and run pytest:
+
+```bash
+python -m pip install -r requirements.txt
+python -m pytest
+```
+
+## Docker and CI/CD
+
+The Dockerfile uses a multi-stage build, runs the service as a non-root user, and defines a health check.
+
+The GitHub Actions workflow runs tests, builds the Docker image, scans it with Trivy, and publishes the image to GHCR when the workflow succeeds on `main`. Published images are tagged with the commit SHA.
+
+## Project structure
+
+```text
+.
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── src/
+│   ├── app/
+│   │   └── main.py
+│   └── train/
+│       └── train.py
+├── tests/
+│   └── test_api.py
+├── Dockerfile
+├── compose.yaml
+├── requirements.txt
+├── model.joblib
+└── README.md
+```
+
+## Repository
+
+https://github.com/areenshunnaq13-blip/AI381-Lab2-Churn-API
