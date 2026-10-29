@@ -3,7 +3,9 @@ import pandas as pd
 import joblib
 from fastapi import FastAPI
 
-MODEL_PATH = "model.joblib"
+from pathlib import Path
+
+MODEL_PATH = Path(__file__).resolve().parent.parent / "model.joblib"
 
 FEATURES = [
     "tenure_months",
