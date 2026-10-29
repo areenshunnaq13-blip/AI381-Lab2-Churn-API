@@ -1,0 +1,12 @@
+
+.venv/
+.venv1/
+.venv2/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.git/
+.github/
+.idea/
+.env
