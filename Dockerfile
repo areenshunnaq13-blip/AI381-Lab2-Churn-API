@@ -1,26 +1,34 @@
 
 # Stage 1: Install dependencies
-FROM python:3.11.9-slim AS builder
+FROM python:3.11-slim AS builder
+
+RUN apt-get update && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN python -m pip install --no-cache-dir --upgrade "setuptools>=78.1.1" "wheel>=0.46.2"
+RUN python -m pip install --no-cache-dir --upgrade \
+    "setuptools>=78.1.1" "wheel>=0.46.2"
 
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Stage 2: Build the runtime image
-FROM python:3.11.9-slim
+# Stage 2: Runtime image
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN python -m pip install --no-cache-dir --upgrade "setuptools>=78.1.1" "wheel>=0.46.2"
+RUN python -m pip install --no-cache-dir --upgrade \
+    "setuptools>=78.1.1" "wheel>=0.46.2"
 
 COPY --from=builder /install /usr/local
 COPY . .
 
-# Run as a non-root user
 RUN useradd --create-home appuser
+
 USER appuser
 
 EXPOSE 8000
