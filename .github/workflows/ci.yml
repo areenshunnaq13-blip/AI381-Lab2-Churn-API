@@ -1,3 +1,4 @@
+
 name: CI
 
 on:
@@ -39,6 +40,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -72,8 +74,11 @@ jobs:
 
       - name: Tag image for GHCR
         run: |
+          IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           docker tag local/churn-api:${{ github.sha }} \
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${IMAGE_NAME}:${{ github.sha }}
 
       - name: Push image to GHCR
-        run: docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+        run: |
+          IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker push ghcr.io/${IMAGE_NAME}:${{ github.sha }}
