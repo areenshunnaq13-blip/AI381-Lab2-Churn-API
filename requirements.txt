@@ -5,3 +5,4 @@ fastapi
 uvicorn
 jupyter
 pytest
+httpx
