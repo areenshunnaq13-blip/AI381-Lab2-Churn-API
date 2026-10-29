@@ -4,13 +4,17 @@ FROM python:3.11.9-slim AS builder
 
 WORKDIR /app
 
+RUN python -m pip install --no-cache-dir --upgrade "setuptools>=78.1.1" "wheel>=0.46.2"
+
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN python -m pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Build the runtime image
 FROM python:3.11.9-slim
 
 WORKDIR /app
+
+RUN python -m pip install --no-cache-dir --upgrade "setuptools>=78.1.1" "wheel>=0.46.2"
 
 COPY --from=builder /install /usr/local
 COPY . .
