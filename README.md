@@ -2,8 +2,7 @@
 
 Dr. Tariq Al-Omari · AI381 Machine Learning Operations · JUST · Fall 2026/27
 
-Lab 1 is short, a little chaotic, and on purpose. You will deliver a model by hand, change it, and
-log what that costs you. There is no wrong result: an honest pain log is a great pain log.
+Lab 1 is short, a little chaotic, and on purpose. You will deliver a model by hand, change it, and log what that costs you. There is no wrong result: an honest pain log is a great pain log.
 
 ## What is in this kit
 
@@ -20,9 +19,13 @@ log what that costs you. There is no wrong result: an honest pain log is a great
 ## The race (start your stopwatch first)
 
 1. **Round 1.** Run the notebook with `churn_v1.csv`. Start the API by hand:
+
    `uvicorn app.main:app --port 8000`
+
    Send three predictions with curl, changing the values each time:
+
    `curl -X POST localhost:8000/predict -H "Content-Type: application/json" -d @sample_request.json`
+
 2. **Twist 1.** Change the notebook to `churn_v2.csv`, retrain and redeploy. Find and fix what breaks.
 3. **Twist 2.** Create a brand-new virtual environment (or a Codespace) and rebuild everything using only your own notes.
 4. **Twist 3.** Answer: "Which model version is your API serving right now?" and explain why it is hard to prove.
@@ -35,11 +38,13 @@ log what that costs you. There is no wrong result: an honest pain log is a great
 
 ## Turning it in
 
-Record one 5–8 minute video with your face and voice, say each checkpoint aloud, and turn it in on the
-**Lab 1** assignment in the **AI381 MLOPs** team on Microsoft Teams (Lab Submissions channel, Assignments tab).
+Record one 5–8 minute video with your face and voice, say each checkpoint aloud, and turn it in on the **Lab 1** assignment in the **AI381 MLOPs** team on Microsoft Teams (Lab Submissions channel, Assignments tab).
+
 The full instructions, checkpoints and rubric are on e-learning and on the Teams assignment.
 
 Questions: Thursday online office hours on Teams, the Lab Submissions channel, or talomari@just.edu.jo.
+
+---
 
 # AI381 Lab 2 — Churn Prediction API
 
@@ -131,17 +136,25 @@ The GitHub Actions workflow runs tests, builds the Docker image, scans it with T
 ## Repository
 
 https://github.com/areenshunnaq13-blip/AI381-Lab2-Churn-API
+
 ## Docker Image (GitHub Container Registry)
 
+The Docker image is published to GitHub Container Registry (GHCR).
+
 **Image:**
+
 `ghcr.io/areenshunnaq13-blip/ai381-lab2-churn-api`
 
 **Tag:**
-`7a17961f5749668e31309fcc97ba65cb743baa03`
+
+`6205d551dfec68b661d28cdefdfb6ccf1ec4ddc8`
 
 **Image Digest:**
-`sha256:fab434875ed451e962f15ad32361eca0575f1b6d013a156aeb245973fd239c42`
+
+`sha256:8d7846f94cdd23809eb278a760b05bd25b8984a7e79e2427ca4e094cfc52825b`
 
 **Pull command:**
+
 ```bash
-docker pull ghcr.io/areenshunnaq13-blip/ai381-lab2-churn-api:7a17961f5749668e31309fcc97ba65cb743baa03
+docker pull ghcr.io/areenshunnaq13-blip/ai381-lab2-churn-api:6205d551dfec68b661d28cdefdfb6ccf1ec4ddc8
+```
