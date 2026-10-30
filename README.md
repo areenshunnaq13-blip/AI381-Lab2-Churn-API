@@ -131,3 +131,17 @@ The GitHub Actions workflow runs tests, builds the Docker image, scans it with T
 ## Repository
 
 https://github.com/areenshunnaq13-blip/AI381-Lab2-Churn-API
+## Docker Image (GitHub Container Registry)
+
+**Image:**
+`ghcr.io/areenshunnaq13-blip/ai381-lab2-churn-api`
+
+**Tag:**
+`7a17961f5749668e31309fcc97ba65cb743baa03`
+
+**Image Digest:**
+`sha256:fab434875ed451e962f15ad32361eca0575f1b6d013a156aeb245973fd239c42`
+
+**Pull command:**
+```bash
+docker pull ghcr.io/areenshunnaq13-blip/ai381-lab2-churn-api:7a17961f5749668e31309fcc97ba65cb743baa03
