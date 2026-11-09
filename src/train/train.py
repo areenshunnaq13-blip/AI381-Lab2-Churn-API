@@ -28,6 +28,9 @@ MLFLOW_TRACKING_URI = "http://localhost:5000"
 EXPERIMENT_NAME = "churn-model-training"
 REGISTERED_MODEL_NAME = "churn-model"
 
+# Maximum allowed P95 latency for promotion
+MAX_P95_LATENCY_MS = 100
+
 TARGET = "churn"
 
 NUMERIC_FEATURES = [
@@ -85,7 +88,6 @@ def calculate_p95_latency(model, X_test):
 def calculate_slice_f1_scores(X_test, y_test, predictions):
     slice_scores = {}
 
-    # Calculate F1 score for each contract type
     for contract_type in X_test["contract"].unique():
         mask = X_test["contract"] == contract_type
 
@@ -96,10 +98,11 @@ def calculate_slice_f1_scores(X_test, y_test, predictions):
                 zero_division=0
             )
 
-            metric_name = f"f1_contract_{contract_type.replace('-', '_')}"
+            metric_name = (
+                f"f1_contract_{contract_type.replace('-', '_')}"
+            )
             slice_scores[metric_name] = score
 
-    # Calculate F1 score for each internet service type
     for service_type in X_test["internet_service"].unique():
         mask = X_test["internet_service"] == service_type
 
@@ -110,13 +113,23 @@ def calculate_slice_f1_scores(X_test, y_test, predictions):
                 zero_division=0
             )
 
-            metric_name = f"f1_internet_{service_type.replace('-', '_')}"
+            metric_name = (
+                f"f1_internet_{service_type.replace('-', '_')}"
+            )
             slice_scores[metric_name] = score
 
     return slice_scores
 
 
-def train_model(model_name, classifier, X_train, X_test, y_train, y_test, data_hash):
+def train_model(
+    model_name,
+    classifier,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    data_hash
+):
     preprocessor = create_preprocessor()
 
     model = Pipeline([
@@ -142,7 +155,6 @@ def train_model(model_name, classifier, X_train, X_test, y_train, y_test, data_h
         joblib.dump(model, model_file)
         model_size = os.path.getsize(model_file)
 
-        # Calculate F1 score for each data slice
         slice_scores = calculate_slice_f1_scores(
             X_test,
             y_test,
@@ -194,22 +206,95 @@ def train_model(model_name, classifier, X_train, X_test, y_train, y_test, data_h
 def register_champion(best_model):
     client = MlflowClient()
 
-    print("\nRegistering champion model in MLflow...")
+    print("\nChecking promotion gate...")
 
+    # Register the candidate model
     model_version = mlflow.register_model(
         model_uri=best_model["model_uri"],
         name=REGISTERED_MODEL_NAME
     )
 
-    client.set_registered_model_alias(
-        name=REGISTERED_MODEL_NAME,
-        alias="champion",
-        version=model_version.version
-    )
+    candidate_version = model_version.version
+    candidate_f1 = best_model["f1_score"]
+    candidate_latency = best_model["p95_latency_ms"]
 
-    print(f"Registered model name: {REGISTERED_MODEL_NAME}")
-    print(f"Registered version: {model_version.version}")
-    print("Champion alias: @champion")
+    try:
+        # Get the current champion
+        champion_version = client.get_model_version_by_alias(
+            REGISTERED_MODEL_NAME,
+            "champion"
+        )
+
+        champion_run = client.get_run(champion_version.run_id)
+
+        champion_f1 = champion_run.data.metrics.get(
+            "f1_score",
+            0
+        )
+
+        print(
+            f"\nCurrent champion version: "
+            f"{champion_version.version}"
+        )
+        print(f"Current champion F1: {champion_f1:.3f}")
+        print(f"Candidate version: {candidate_version}")
+        print(f"Candidate F1: {candidate_f1:.3f}")
+        print(
+            f"Candidate P95 latency: "
+            f"{candidate_latency:.3f} ms"
+        )
+
+        # Promotion conditions
+        is_better = candidate_f1 > champion_f1
+        is_fast_enough = (
+            candidate_latency <= MAX_P95_LATENCY_MS
+        )
+
+        if is_better and is_fast_enough:
+            client.set_registered_model_alias(
+                name=REGISTERED_MODEL_NAME,
+                alias="champion",
+                version=candidate_version
+            )
+
+            print("\nPROMOTION APPROVED 🏆")
+            print(
+                f"Champion updated to version "
+                f"{candidate_version}"
+            )
+
+        else:
+            print("\nPROMOTION REJECTED ❌")
+
+            if not is_better:
+                print(
+                    "Candidate F1 is not better than "
+                    "the current champion."
+                )
+
+            if not is_fast_enough:
+                print(
+                    f"Candidate latency exceeds the "
+                    f"{MAX_P95_LATENCY_MS} ms budget."
+                )
+
+            print(
+                "The current champion remains unchanged."
+            )
+
+    except mlflow.exceptions.RestException:
+        # If no champion exists yet, promote the first model
+        client.set_registered_model_alias(
+            name=REGISTERED_MODEL_NAME,
+            alias="champion",
+            version=candidate_version
+        )
+
+        print("\nNo existing champion found.")
+        print("First candidate promoted as champion 🏆")
+
+    print(f"\nRegistered model name: {REGISTERED_MODEL_NAME}")
+    print(f"Registered version: {candidate_version}")
 
 
 def train():
@@ -228,9 +313,15 @@ def train():
 
     features = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
-    missing = [col for col in features if col not in df.columns]
+    missing = [
+        col for col in features
+        if col not in df.columns
+    ]
+
     if missing:
-        raise ValueError(f"Missing feature columns: {missing}")
+        raise ValueError(
+            f"Missing feature columns: {missing}"
+        )
 
     X = df[features].copy()
     y = df[TARGET]
@@ -277,13 +368,19 @@ def train():
         )
         results.append(result)
 
-    # Select the champion based on the highest overall F1 score
-    best_model = max(results, key=lambda result: result["f1_score"])
+    # Select the best candidate based on F1 score
+    best_model = max(
+        results,
+        key=lambda result: result["f1_score"]
+    )
 
-    # Save the champion model locally
-    joblib.dump(best_model["model"], MODEL_PATH)
+    # Save the best candidate locally
+    joblib.dump(
+        best_model["model"],
+        MODEL_PATH
+    )
 
-    # Register the champion in MLflow and give it the champion alias
+    # Apply the promotion gate
     register_champion(best_model)
 
     print("\n" + "=" * 50)
@@ -298,12 +395,17 @@ def train():
             f"Size={result['model_size_bytes']} bytes"
         )
 
-    print("\nChampion candidate:", best_model["name"])
-    print(f"Best F1 score: {best_model['f1_score']:.3f}")
-    print(f"Champion saved locally to: {MODEL_PATH}")
     print(
-        f"Champion registered in MLflow as: "
-        f"{REGISTERED_MODEL_NAME}@champion"
+        "\nChampion candidate:",
+        best_model["name"]
+    )
+    print(
+        f"Best F1 score: "
+        f"{best_model['f1_score']:.3f}"
+    )
+    print(
+        f"Best candidate saved locally to: "
+        f"{MODEL_PATH}"
     )
 
 
