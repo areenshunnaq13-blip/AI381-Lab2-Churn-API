@@ -6,3 +6,4 @@ uvicorn
 jupyter
 pytest
 httpx
+mlflow
