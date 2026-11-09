@@ -373,7 +373,6 @@ def train():
         results,
         key=lambda result: result["f1_score"]
     )
-
     # Save the best candidate locally
     joblib.dump(
         best_model["model"],
