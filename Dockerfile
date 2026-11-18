@@ -13,8 +13,16 @@ RUN python -m pip install --no-cache-dir --upgrade \
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir --prefix=/install -r requirements.txt
 
+
 # Stage 2: Runtime image
 FROM python:3.11-slim@sha256:673719e071ecf27434fd2635bbd8d00f49f4fdd81f243143438a42ced8bedf60
+
+# Lineage metadata supplied during image build
+ARG GIT_COMMIT_SHA=unknown
+ARG MLFLOW_RUN_ID=unknown
+
+LABEL org.opencontainers.image.revision="${GIT_COMMIT_SHA}" \
+      ai381.mlflow.run_id="${MLFLOW_RUN_ID}"
 
 RUN apt-get update && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*

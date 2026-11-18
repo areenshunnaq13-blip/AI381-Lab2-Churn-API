@@ -7,3 +7,7 @@ __pycache__/
 *.joblib
 .ipynb_checkpoints/
 .idea/
+.venv311/
+lineage.json
+mlflow.db
+mlartifacts/

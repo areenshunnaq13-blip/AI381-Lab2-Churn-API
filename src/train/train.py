@@ -1,6 +1,9 @@
+
 from pathlib import Path
 import hashlib
+import json
 import os
+import subprocess
 import time
 
 import joblib
@@ -9,6 +12,7 @@ import mlflow
 import mlflow.sklearn
 
 from mlflow import MlflowClient
+from mlflow.models import infer_signature
 
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -20,18 +24,26 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
+# --------------------------------------------------
+# Configuration
+# --------------------------------------------------
+
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_PATH = BASE_DIR / "churn_v2.csv"
 MODEL_PATH = BASE_DIR / "model.joblib"
+LINEAGE_PATH = BASE_DIR / "lineage.json"
 
 MLFLOW_TRACKING_URI = "http://localhost:5000"
 EXPERIMENT_NAME = "churn-model-training"
 REGISTERED_MODEL_NAME = "churn-model"
 
-# Maximum allowed P95 latency for promotion
 MAX_P95_LATENCY_MS = 100
-
 TARGET = "churn"
+
+# Set this to true in GitHub Actions when testing the gate.
+FAIL_ON_PROMOTION_REJECTION = (
+    os.getenv("FAIL_ON_PROMOTION_REJECTION", "false").lower() == "true"
+)
 
 NUMERIC_FEATURES = [
     "tenure_months",
@@ -45,6 +57,10 @@ CATEGORICAL_FEATURES = [
 ]
 
 
+# --------------------------------------------------
+# Utility functions
+# --------------------------------------------------
+
 def get_file_hash(file_path):
     hasher = hashlib.sha256()
 
@@ -53,6 +69,25 @@ def get_file_hash(file_path):
             hasher.update(chunk)
 
     return hasher.hexdigest()
+
+
+def get_git_commit_sha():
+    """
+    Get the commit SHA from GitHub Actions or local Git.
+    """
+    github_sha = os.getenv("GITHUB_SHA")
+
+    if github_sha:
+        return github_sha
+
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=BASE_DIR,
+            text=True,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
 
 
 def create_preprocessor():
@@ -71,6 +106,10 @@ def create_preprocessor():
         ("categorical", categorical_pipeline, CATEGORICAL_FEATURES),
     ])
 
+
+# --------------------------------------------------
+# Evaluation functions
+# --------------------------------------------------
 
 def calculate_p95_latency(model, X_test):
     latencies = []
@@ -95,7 +134,7 @@ def calculate_slice_f1_scores(X_test, y_test, predictions):
             score = f1_score(
                 y_test[mask],
                 predictions[mask],
-                zero_division=0
+                zero_division=0,
             )
 
             metric_name = (
@@ -110,7 +149,7 @@ def calculate_slice_f1_scores(X_test, y_test, predictions):
             score = f1_score(
                 y_test[mask],
                 predictions[mask],
-                zero_division=0
+                zero_division=0,
             )
 
             metric_name = (
@@ -121,6 +160,10 @@ def calculate_slice_f1_scores(X_test, y_test, predictions):
     return slice_scores
 
 
+# --------------------------------------------------
+# Model training
+# --------------------------------------------------
+
 def train_model(
     model_name,
     classifier,
@@ -128,7 +171,8 @@ def train_model(
     X_test,
     y_train,
     y_test,
-    data_hash
+    data_hash,
+    commit_sha,
 ):
     preprocessor = create_preprocessor()
 
@@ -142,6 +186,10 @@ def train_model(
         mlflow.log_param("data_hash", data_hash)
         mlflow.log_param("test_size", 0.2)
         mlflow.log_param("random_state", 42)
+        mlflow.log_param("git_commit_sha", commit_sha)
+
+        mlflow.set_tag("git_commit_sha", commit_sha)
+        mlflow.set_tag("model_candidate", model_name)
 
         model.fit(X_train, y_train)
         predictions = model.predict(X_test)
@@ -158,7 +206,7 @@ def train_model(
         slice_scores = calculate_slice_f1_scores(
             X_test,
             y_test,
-            predictions
+            predictions,
         )
 
         # Log overall metrics
@@ -171,13 +219,24 @@ def train_model(
         for metric_name, score in slice_scores.items():
             mlflow.log_metric(metric_name, score)
 
+        # Create model signature and input example
+        input_example = X_train.head(5)
+        example_predictions = model.predict(input_example)
+        signature = infer_signature(
+            input_example,
+            example_predictions,
+        )
+
+        # Log model with signature
         model_info = mlflow.sklearn.log_model(
             model,
             "model",
+            signature=signature,
+            input_example=input_example,
             skops_trusted_types=[
                 "numpy.dtype",
-                "sklearn.tree._tree.Tree"
-            ]
+                "sklearn.tree._tree.Tree",
+            ],
         )
 
         print(f"\nModel: {model_name}")
@@ -203,6 +262,10 @@ def train_model(
         }
 
 
+# --------------------------------------------------
+# Model promotion gate
+# --------------------------------------------------
+
 def register_champion(best_model):
     client = MlflowClient()
 
@@ -211,25 +274,27 @@ def register_champion(best_model):
     # Register the candidate model
     model_version = mlflow.register_model(
         model_uri=best_model["model_uri"],
-        name=REGISTERED_MODEL_NAME
+        name=REGISTERED_MODEL_NAME,
     )
 
     candidate_version = model_version.version
     candidate_f1 = best_model["f1_score"]
     candidate_latency = best_model["p95_latency_ms"]
 
+    promoted = False
+
     try:
         # Get the current champion
         champion_version = client.get_model_version_by_alias(
             REGISTERED_MODEL_NAME,
-            "champion"
+            "champion",
         )
 
         champion_run = client.get_run(champion_version.run_id)
 
         champion_f1 = champion_run.data.metrics.get(
             "f1_score",
-            0
+            0,
         )
 
         print(
@@ -254,8 +319,10 @@ def register_champion(best_model):
             client.set_registered_model_alias(
                 name=REGISTERED_MODEL_NAME,
                 alias="champion",
-                version=candidate_version
+                version=candidate_version,
             )
+
+            promoted = True
 
             print("\nPROMOTION APPROVED 🏆")
             print(
@@ -283,12 +350,14 @@ def register_champion(best_model):
             )
 
     except mlflow.exceptions.RestException:
-        # If no champion exists yet, promote the first model
+        # If no champion exists, promote the first candidate.
         client.set_registered_model_alias(
             name=REGISTERED_MODEL_NAME,
             alias="champion",
-            version=candidate_version
+            version=candidate_version,
         )
+
+        promoted = True
 
         print("\nNo existing champion found.")
         print("First candidate promoted as champion 🏆")
@@ -296,14 +365,53 @@ def register_champion(best_model):
     print(f"\nRegistered model name: {REGISTERED_MODEL_NAME}")
     print(f"Registered version: {candidate_version}")
 
+    return {
+        "promoted": promoted,
+        "model_version": str(candidate_version),
+    }
+
+
+# --------------------------------------------------
+# Lineage
+# --------------------------------------------------
+
+def save_lineage(best_model, promotion_result, commit_sha):
+    lineage = {
+        "git_commit_sha": commit_sha,
+        "mlflow_run_id": best_model["run_id"],
+        "registered_model_name": REGISTERED_MODEL_NAME,
+        "model_version": promotion_result["model_version"],
+        "model_candidate": best_model["name"],
+        "promoted": promotion_result["promoted"],
+    }
+
+    with open(LINEAGE_PATH, "w", encoding="utf-8") as file:
+        json.dump(lineage, file, indent=4)
+
+    print("\nLineage information saved:")
+    print(json.dumps(lineage, indent=4))
+
+
+# --------------------------------------------------
+# Main training pipeline
+# --------------------------------------------------
 
 def train():
+    if not DATA_PATH.exists():
+        raise FileNotFoundError(
+            f"Dataset not found: {DATA_PATH}"
+        )
+
     df = pd.read_csv(DATA_PATH)
 
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(EXPERIMENT_NAME)
 
     data_hash = get_file_hash(DATA_PATH)
+    commit_sha = get_git_commit_sha()
+
+    print(f"Dataset SHA256: {data_hash}")
+    print(f"Git commit SHA: {commit_sha}")
 
     if TARGET not in df.columns:
         raise ValueError(
@@ -337,20 +445,20 @@ def train():
     candidates = [
         (
             "LogisticRegression",
-            LogisticRegression(max_iter=1000)
+            LogisticRegression(max_iter=1000),
         ),
         (
             "RandomForest",
             RandomForestClassifier(
                 n_estimators=100,
-                random_state=42
-            )
+                random_state=42,
+            ),
         ),
         (
             "GradientBoosting",
             GradientBoostingClassifier(
-                random_state=42
-            )
+                random_state=42,
+            ),
         ),
     ]
 
@@ -364,23 +472,44 @@ def train():
             X_test,
             y_train,
             y_test,
-            data_hash
+            data_hash,
+            commit_sha,
         )
         results.append(result)
 
     # Select the best candidate based on F1 score
     best_model = max(
         results,
-        key=lambda result: result["f1_score"]
-    )
-    # Save the best candidate locally
-    joblib.dump(
-        best_model["model"],
-        MODEL_PATH
+        key=lambda result: result["f1_score"],
     )
 
     # Apply the promotion gate
-    register_champion(best_model)
+    promotion_result = register_champion(best_model)
+
+    # Save lineage for this training attempt
+    save_lineage(
+        best_model,
+        promotion_result,
+        commit_sha,
+    )
+
+    # Only save the model locally if it was promoted
+    if promotion_result["promoted"]:
+        joblib.dump(
+            best_model["model"],
+            MODEL_PATH,
+        )
+        print(f"\nChampion model saved to: {MODEL_PATH}")
+    else:
+        print(
+            "\nThe local champion model was not replaced."
+        )
+
+        if FAIL_ON_PROMOTION_REJECTION:
+            raise RuntimeError(
+                "Promotion gate rejected the candidate. "
+                "The workflow must stop."
+            )
 
     print("\n" + "=" * 50)
     print("MODEL COMPARISON COMPLETE")
@@ -396,15 +525,11 @@ def train():
 
     print(
         "\nChampion candidate:",
-        best_model["name"]
+        best_model["name"],
     )
     print(
         f"Best F1 score: "
         f"{best_model['f1_score']:.3f}"
-    )
-    print(
-        f"Best candidate saved locally to: "
-        f"{MODEL_PATH}"
     )
 
 
